@@ -5,28 +5,47 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.view.animation.AnimationUtils
-import android.widget.ImageButton
-import android.widget.TextView
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import com.aurashield.ai.service.BackgroundMonitorService
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import java.util.Locale
+import kotlin.math.sin
 
 class MainActivity : ComponentActivity() {
 
@@ -35,8 +54,6 @@ class MainActivity : ComponentActivity() {
     ) { isGranted: Boolean ->
         if (isGranted) {
             Toast.makeText(this, "Notification permission granted", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Notification permission denied. Background service alerts might not be visible.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -47,7 +64,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             AuraShieldTheme {
-                MainScreen()
+                MainNavigationFrame()
             }
         }
     }
@@ -87,112 +104,784 @@ class MainActivity : ComponentActivity() {
         return false
     }
 
+    enum class Screen {
+        Onboarding, Dashboard, Detection, KillSwitch, History
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun MainScreen() {
-        var serviceRunning by remember { mutableStateOf(isServiceRunning()) }
-        
-        // Periodically poll service state
+    fun MainNavigationFrame() {
+        var currentScreen by remember { mutableStateOf(Screen.Onboarding) }
+        var isEngineEnabled by remember { mutableStateOf(isServiceRunning()) }
+        val context = LocalContext.current
+
+        Scaffold(
+            bottomBar = {
+                if (currentScreen != Screen.Onboarding) {
+                    NavigationBar(
+                        containerColor = Color(0xFF12162E),
+                        tonalElevation = 8.dp
+                    ) {
+                        NavigationBarItem(
+                            selected = currentScreen == Screen.Dashboard,
+                            onClick = { currentScreen = Screen.Dashboard },
+                            icon = { Icon(Icons.Default.Home, contentDescription = "Dashboard") },
+                            label = { Text("Console", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color(0xFF00C896),
+                                unselectedIconColor = Color(0xFFE2E8F0).copy(alpha = 0.5f),
+                                indicatorColor = Color(0xFF1F2336)
+                            )
+                        )
+                        NavigationBarItem(
+                            selected = currentScreen == Screen.Detection,
+                            onClick = { currentScreen = Screen.Detection },
+                            icon = { Icon(Icons.Default.Refresh, contentDescription = "Scanning") },
+                            label = { Text("Live Monitor", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color(0xFF00C896),
+                                unselectedIconColor = Color(0xFFE2E8F0).copy(alpha = 0.5f),
+                                indicatorColor = Color(0xFF1F2336)
+                            )
+                        )
+                        NavigationBarItem(
+                            selected = currentScreen == Screen.KillSwitch,
+                            onClick = { currentScreen = Screen.KillSwitch },
+                            icon = { Icon(Icons.Default.Warning, contentDescription = "Kill Switch") },
+                            label = { Text("System Lock", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color(0xFFFF6B6B),
+                                unselectedIconColor = Color(0xFFE2E8F0).copy(alpha = 0.5f),
+                                indicatorColor = Color(0xFF1F2336)
+                            )
+                        )
+                        NavigationBarItem(
+                            selected = currentScreen == Screen.History,
+                            onClick = { currentScreen = Screen.History },
+                            icon = { Icon(Icons.Default.List, contentDescription = "Forensics") },
+                            label = { Text("Risk Log", fontSize = 10.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color(0xFF00C896),
+                                unselectedIconColor = Color(0xFFE2E8F0).copy(alpha = 0.5f),
+                                indicatorColor = Color(0xFF1F2336)
+                            )
+                        )
+                    }
+                }
+            }
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF0B0F26))
+                    .padding(paddingValues)
+            ) {
+                when (currentScreen) {
+                    Screen.Onboarding -> PermissionOnboardingScreen(
+                        isEngineActive = isEngineEnabled,
+                        onEngineToggle = { enabled ->
+                            isEngineEnabled = enabled
+                            if (enabled) {
+                                startMonitorService()
+                                Toast.makeText(context, "Call Monitoring Engine Active", Toast.LENGTH_SHORT).show()
+                            } else {
+                                stopMonitorService()
+                                Toast.makeText(context, "Monitoring Engine Stopped", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onNavigateToDashboard = { currentScreen = Screen.Dashboard }
+                    )
+                    Screen.Dashboard -> AdvancedDashboardScreen(
+                        isEngineActive = isEngineEnabled,
+                        onEngineToggle = { enabled ->
+                            isEngineEnabled = enabled
+                            if (enabled) startMonitorService() else stopMonitorService()
+                        }
+                    )
+                    Screen.Detection -> EdgeLiveDetectionScreen()
+                    Screen.KillSwitch -> SystemKillSwitchScreen()
+                    Screen.History -> ForensicHistoryScreen()
+                }
+            }
+        }
+    }
+
+    // 1. PermissionOnboardingScreen
+    @Composable
+    fun PermissionOnboardingScreen(
+        isEngineActive: Boolean,
+        onEngineToggle: (Boolean) -> Unit,
+        onNavigateToDashboard: () -> Unit
+    ) {
+        val context = LocalContext.current
+        var isOverlayEnabled by remember {
+            mutableStateOf(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    Settings.canDrawOverlays(context)
+                } else {
+                    true
+                }
+            )
+        }
+
+        // Poll overlay permission state when app resumes
         LaunchedEffect(Unit) {
             while (true) {
-                serviceRunning = isServiceRunning()
-                kotlinx.coroutines.delay(1000)
+                isOverlayEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    Settings.canDrawOverlays(context)
+                } else {
+                    true
+                }
+                delay(1000)
             }
         }
 
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { context ->
-                val view = android.view.LayoutInflater.from(context).inflate(R.layout.activity_main, null)
-                
-                // Set up pulsing scale animation on the central shield button view
-                val shieldButton = view.findViewById<ImageButton>(R.id.btnShield)
-                val shieldPulseAnim = AnimationUtils.loadAnimation(context, R.anim.shield_pulse)
-                shieldButton.startAnimation(shieldPulseAnim)
-
-                // Set up pulsing alpha animation on the status indicators
-                val statusLayout = view.findViewById<android.view.View>(R.id.layoutStatus)
-                val subtitlePulseAnim = AnimationUtils.loadAnimation(context, R.anim.subtitle_pulse)
-                statusLayout.startAnimation(subtitlePulseAnim)
-
-                // Start background animation for audio wave bars (20 elements for smooth visualizer)
-                val waveBars = listOf(
-                    view.findViewById<android.view.View>(R.id.waveBar1),
-                    view.findViewById<android.view.View>(R.id.waveBar2),
-                    view.findViewById<android.view.View>(R.id.waveBar3),
-                    view.findViewById<android.view.View>(R.id.waveBar4),
-                    view.findViewById<android.view.View>(R.id.waveBar5),
-                    view.findViewById<android.view.View>(R.id.waveBar6),
-                    view.findViewById<android.view.View>(R.id.waveBar7),
-                    view.findViewById<android.view.View>(R.id.waveBar8),
-                    view.findViewById<android.view.View>(R.id.waveBar9),
-                    view.findViewById<android.view.View>(R.id.waveBar10),
-                    view.findViewById<android.view.View>(R.id.waveBar11),
-                    view.findViewById<android.view.View>(R.id.waveBar12),
-                    view.findViewById<android.view.View>(R.id.waveBar13),
-                    view.findViewById<android.view.View>(R.id.waveBar14),
-                    view.findViewById<android.view.View>(R.id.waveBar15),
-                    view.findViewById<android.view.View>(R.id.waveBar16),
-                    view.findViewById<android.view.View>(R.id.waveBar17),
-                    view.findViewById<android.view.View>(R.id.waveBar18),
-                    view.findViewById<android.view.View>(R.id.waveBar19),
-                    view.findViewById<android.view.View>(R.id.waveBar20)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Central Logo
+            Box(
+                modifier = Modifier
+                    .size(120dp)
+                    .background(Color(0xFF1F2336), RoundedCornerShape(60.dp))
+                    .border(2.dp, Color(0xFF00C896), RoundedCornerShape(60.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Shield,
+                    contentDescription = null,
+                    tint = Color(0xFF00C896),
+                    modifier = Modifier.size(54dp)
                 )
-                
-                // Launch coroutine to animate wave bars heights
-                (context as? androidx.lifecycle.LifecycleOwner)?.lifecycleScope?.launch {
-                    val random = java.util.Random()
-                    while (isActive) {
-                        for (bar in waveBars) {
-                            bar?.let {
-                                val newScaleY = 0.2f + random.nextFloat() * 1.3f
-                                it.animate()
-                                    .scaleY(newScaleY)
-                                    .setDuration(120)
-                                    .start()
-                            }
-                        }
-                        kotlinx.coroutines.delay(130)
-                    }
-                }
+            }
 
-                // Handle click action to toggle service
-                shieldButton.setOnClickListener {
-                    if (isServiceRunning()) {
-                        stopMonitorService()
-                        Toast.makeText(context, "Stopping Security Monitor...", Toast.LENGTH_SHORT).show()
+            Spacer(modifier = Modifier.height(28.dp))
+
+            Text(
+                text = "AURA SHIELD AI",
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            Text(
+                text = "Edge-Based Call Security & Intercept Core",
+                fontSize = 13.sp,
+                color = Color(0xFFE2E8F0).copy(alpha = 0.6f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 4.dp, bottom = 32.dp)
+            )
+
+            // Toggle 1: Live Call Analysis Engine
+            PermissionToggleCard(
+                title = "Live Call Analysis Engine",
+                description = "Enables real-time heuristics and voice stream analysis via TFLite models running locally.",
+                checked = isEngineActive,
+                onCheckedChange = { onEngineToggle(it) }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Toggle 2: System Overlay Transaction Shield
+            PermissionToggleCard(
+                title = "System Overlay Transaction Shield",
+                description = "Draws secure transactional covers during calls to block critical app overlays and UPI hacks.",
+                checked = isOverlayEnabled,
+                onCheckedChange = { checked ->
+                    if (checked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                        val intent = Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${context.packageName}")
+                        )
+                        context.startActivity(intent)
                     } else {
-                        startMonitorService()
-                        Toast.makeText(context, "Starting Security Monitor...", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Overlay Permission toggled in Settings", Toast.LENGTH_SHORT).show()
                     }
-                    serviceRunning = isServiceRunning()
                 }
+            )
 
-                view
-            },
-            update = { view ->
-                // Update views based on service state
-                val statusText = view.findViewById<TextView>(R.id.tvStatusText)
-                val statusDot = view.findViewById<android.view.View>(R.id.viewStatusDot)
-                val shieldButton = view.findViewById<ImageButton>(R.id.btnShield)
-                val shieldGlow = view.findViewById<android.view.View>(R.id.viewShieldGlow)
+            Spacer(modifier = Modifier.height(40.dp))
 
-                if (serviceRunning) {
-                    statusText.text = "Live Edge Protection Active"
-                    statusText.setTextColor(ContextCompat.getColor(view.context, R.color.mint_green))
-                    statusDot.setBackgroundColor(ContextCompat.getColor(view.context, R.color.mint_green))
-                    shieldButton.setImageResource(R.drawable.ic_shield)
-                    // Show active glow ring
-                    shieldGlow.visibility = android.view.View.VISIBLE
-                } else {
-                    statusText.text = "Protection Inactive"
-                    statusText.setTextColor(ContextCompat.getColor(view.context, R.color.neon_coral))
-                    statusDot.setBackgroundColor(ContextCompat.getColor(view.context, R.color.neon_coral))
-                    shieldButton.setImageResource(android.R.drawable.ic_lock_lock)
-                    // Hide active glow ring
-                    shieldGlow.visibility = android.view.View.INVISIBLE
+            Button(
+                onClick = onNavigateToDashboard,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF00C896),
+                    contentColor = Color.Black
+                )
+            ) {
+                Text("PROCEED TO CONSOLE", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+
+    @Composable
+    fun PermissionToggleCard(
+        title: String,
+        description: String,
+        checked: Boolean,
+        onCheckedChange: (Boolean) -> Unit
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2336))
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
+                    Text(
+                        description,
+                        fontSize = 11.sp,
+                        color = Color(0xFFE2E8F0).copy(alpha = 0.6f),
+                        modifier = Modifier.padding(top = 4.dp),
+                        lineHeight = 15.sp
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Switch(
+                    checked = checked,
+                    onCheckedChange = onCheckedChange,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.Black,
+                        checkedTrackColor = Color(0xFF00C896),
+                        uncheckedTrackColor = Color(0xFF0B0F26)
+                    )
+                )
+            }
+        }
+    }
+
+    // 2. AdvancedDashboardScreen
+    @Composable
+    fun AdvancedDashboardScreen(
+        isEngineActive: Boolean,
+        onEngineToggle: (Boolean) -> Unit
+    ) {
+        var gpayMonitored by remember { mutableStateOf(true) }
+        var phonepeMonitored by remember { mutableStateOf(true) }
+        var paytmMonitored by remember { mutableStateOf(false) }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // You Are Protected Banner
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF00C896), RoundedCornerShape(12.dp))
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Color.Black,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        "YOU ARE PROTECTED",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                        fontSize = 13.sp
+                    )
                 }
             }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // AI Protection Circular Score (92%)
+            Box(
+                modifier = Modifier.size(160dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Circle border
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawCircle(
+                        color = Color(0xFF1F2336),
+                        style = Stroke(width = 12.dp.toPx())
+                    )
+                    drawArc(
+                        color = Color(0xFF00C896),
+                        startAngle = -90f,
+                        sweepAngle = 360f * 0.92f,
+                        useCenter = false,
+                        style = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "92%",
+                        fontSize = 40.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        "Protection Score",
+                        fontSize = 11.sp,
+                        color = Color(0xFFE2E8F0).copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(36.dp))
+
+            // Registry Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF12162E))
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        "Protected Financial Apps Registry",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = Color.White
+                    )
+                    Text(
+                        "Securing transactions during outgoing/incoming phone sessions.",
+                        fontSize = 11.sp,
+                        color = Color(0xFFE2E8F0).copy(alpha = 0.5f),
+                        modifier = Modifier.padding(top = 2.dp, bottom = 16.dp)
+                    )
+
+                    RegistryItem(name = "Google Pay (GPay)", checked = gpayMonitored, onCheckedChange = { gpayMonitored = it })
+                    Divider(color = Color(0xFF1F2336), modifier = Modifier.padding(vertical = 8.dp))
+                    RegistryItem(name = "PhonePe", checked = phonepeMonitored, onCheckedChange = { phonepeMonitored = it })
+                    Divider(color = Color(0xFF1F2336), modifier = Modifier.padding(vertical = 8.dp))
+                    RegistryItem(name = "Paytm", checked = paytmMonitored, onCheckedChange = { paytmMonitored = it })
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun RegistryItem(name: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = if (checked) Color(0xFF00C896) else Color.Gray.copy(alpha = 0.5f),
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(name, color = Color.White, fontSize = 14.sp)
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.Black,
+                    checkedTrackColor = Color(0xFF00C896),
+                    uncheckedTrackColor = Color(0xFF1F2336)
+                )
+            )
+        }
+    }
+
+    // 3. EdgeLiveDetectionScreen
+    @Composable
+    fun EdgeLiveDetectionScreen() {
+        val infiniteTransition = rememberInfiniteTransition(label = "wave")
+        val wavePhase by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 2f * Math.PI.toFloat(),
+            animationSpec = infiniteRepeatable(
+                animation = tween(1200, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "phase"
         )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                "ACTIVE SCANNING MODE",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF00C896),
+                letterSpacing = 1.sp
+            )
+
+            Text(
+                "Analyzing Incoming Stream",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)
+            )
+
+            // Scanning visualizer canvas containing circular loader & live waveform lines
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200dp)
+                    .background(Color(0xFF12162E), RoundedCornerShape(20.dp))
+                    .border(1.2dp, Color(0xFF1F2445), RoundedCornerShape(20.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                // Multi-layered Canvas wave drawing
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val width = size.width
+                    val height = size.height
+                    val middle = height / 2f
+                    
+                    val path1 = Path()
+                    val path2 = Path()
+                    
+                    path1.moveTo(0f, middle)
+                    path2.moveTo(0f, middle)
+                    
+                    for (x in 0..width.toInt() step 5) {
+                        val angle = (x.toFloat() / width) * 4f * Math.PI.toFloat()
+                        
+                        // Layer 1 path
+                        val y1 = middle + sin(angle + wavePhase) * 40f
+                        path1.lineTo(x.toFloat(), y1)
+                        
+                        // Layer 2 path (faster speed shift and different amplitude)
+                        val y2 = middle + sin(angle * 1.5f - wavePhase) * 20f
+                        path2.lineTo(x.toFloat(), y2)
+                    }
+                    
+                    drawPath(
+                        path = path1,
+                        color = Color(0xFF00C896),
+                        style = Stroke(width = 2.dp.toPx())
+                    )
+                    drawPath(
+                        path = path2,
+                        color = Color(0xFF00C896).copy(alpha = 0.4f),
+                        style = Stroke(width = 1.5dp.toPx())
+                    )
+                }
+
+                // Scanning center status tag
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFF0B0F26).copy(alpha = 0.8f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text("Voice Loop: 500ms", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // Edge inference metrics statistics card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2336))
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = Color(0xFF00C896),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Local Inference Statistics", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    InferenceInfoRow("Local Inference Latency", "14 ms")
+                    Divider(color = Color(0xFF12162E), modifier = Modifier.padding(vertical = 8.dp))
+                    InferenceInfoRow("Voice Buffer Window", "500 ms")
+                    Divider(color = Color(0xFF12162E), modifier = Modifier.padding(vertical = 8.dp))
+                    InferenceInfoRow("Model Footprint", "~15 MB (Quantized TFLite)")
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun InferenceInfoRow(label: String, value: String) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(label, color = Color(0xFFE2E8F0).copy(alpha = 0.6f), fontSize = 13.sp)
+            Text(value, color = Color(0xFF00C896), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        }
+    }
+
+    // 4. SystemKillSwitchScreen
+    @Composable
+    fun SystemKillSwitchScreen() {
+        var secondsLeft by remember { mutableStateOf(900) } // 15 minutes = 900s
+        val context = LocalContext.current
+
+        LaunchedEffect(Unit) {
+            while (secondsLeft > 0) {
+                delay(1000)
+                secondsLeft--
+            }
+        }
+
+        val minutes = secondsLeft / 60
+        val seconds = secondsLeft % 60
+        val formattedTime = String.format(Locale.US, "%02d:%02d", minutes, seconds)
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Neon coral red alert block icon
+            Box(
+                modifier = Modifier
+                    .size(90dp)
+                    .background(Color(0xFFFF6B6B).copy(alpha = 0.1f), RoundedCornerShape(45.dp))
+                    .border(2.dp, Color(0xFFFF6B6B), RoundedCornerShape(45.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = Color(0xFFFF6B6B),
+                    modifier = Modifier.size(36dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "🔒 SYSTEM INTERCEPTED",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFF6B6B),
+                letterSpacing = 1.sp
+            )
+
+            Text(
+                text = "A suspected clone voice stream matched banking social engineering heuristics. Critical financial transactions have been overlay locked.",
+                fontSize = 13.sp,
+                color = Color(0xFFE2E8F0).copy(alpha = 0.7f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 10.dp, bottom = 28.dp),
+                lineHeight = 18.sp
+            )
+
+            // Timer display card
+            Card(
+                modifier = Modifier.fillMaxWidth(0.8f),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2336))
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "LOCKOUT COUNTDOWN",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.5f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = formattedTime,
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(36.dp))
+
+            // Action override buttons
+            Button(
+                onClick = {
+                    Toast.makeText(context, "Requesting Local System Biometrics...", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6B6B), contentColor = Color.White)
+            ) {
+                Text("Verify via Biometric Override", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+
+    // 5. ForensicHistoryScreen
+    data class ThreatLog(
+        val phone: String,
+        val risk: Int,
+        val timestamp: String,
+        val details: String,
+        val classification: String
+    )
+
+    @Composable
+    fun ForensicHistoryScreen() {
+        val mockLogs = remember {
+            listOf(
+                ThreatLog("+1 (555) 019-2834", 92, "10 mins ago", "Deepfake anomaly identified. Formant shifts match cloned model pattern.", "AI Voice Clone"),
+                ThreatLog("+1 (555) 048-1920", 45, "1 hour ago", "Suspect pitch variance detected. Voice features altered.", "Pitch Variance"),
+                ThreatLog("+1 (555) 012-7384", 2, "3 hours ago", "Acoustics matching authenticated signature.", "Safe Contact"),
+                ThreatLog("+1 (555) 089-3829", 95, "Yesterday", "Financial request keywords mapping deepfake model payload.", "AI Clone / Scammer")
+            )
+        }
+
+        var expandedIndex by remember { mutableStateOf(-1) }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+        ) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Forensic History Log", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(
+                "Analysis records of call voice sessions.",
+                fontSize = 12.sp,
+                color = Color(0xFFE2E8F0).copy(alpha = 0.5f),
+                modifier = Modifier.padding(bottom = 20.dp)
+            )
+
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                itemsIndexed(mockLogs) { index, log ->
+                    ForensicLogCard(
+                        log = log,
+                        expanded = index == expandedIndex,
+                        onToggle = {
+                            expandedIndex = if (expandedIndex == index) -1 else index
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun ForensicLogCard(
+        log: ThreatLog,
+        expanded: Boolean,
+        onToggle: () -> Unit
+    ) {
+        val riskColor = when {
+            log.risk >= 80 -> Color(0xFFFF6B6B)
+            log.risk >= 30 -> Color(0xFFFF9800)
+            else -> Color(0xFF00C896)
+        }
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggle() },
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2336))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(log.phone, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
+                        Text(log.timestamp, fontSize = 11.sp, color = Color(0xFFE2E8F0).copy(alpha = 0.5f))
+                    }
+                    Box(
+                        modifier = Modifier
+                            .background(riskColor.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                            .border(1.dp, riskColor, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("${log.risk}% RISK", color = riskColor, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                }
+
+                // Expandable sub-panel containing spectrogram placeholder
+                if (expanded) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Divider(color = Color(0xFF0B0F26))
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text("Analyzed Mel-Spectrogram Layer", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.5f))
+
+                    // Draw image-like spectrogram placeholder box
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80dp)
+                            .padding(top = 6.dp)
+                            .background(Color(0xFF12162E), RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val w = size.width
+                            val h = size.height
+                            val numLines = 40
+                            val lineW = w / numLines
+                            
+                            // Draw mock heat spectrum lines
+                            for (i in 0 until numLines) {
+                                val lineH = h * (0.2f + 0.6f * sin(i.toFloat() * 0.4f).coerceAtLeast(0f))
+                                drawRect(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(Color(0xFFFF6B6B), Color(0xFFFF9800), Color(0xFF00C896))
+                                    ),
+                                    topLeft = androidx.compose.ui.geometry.Offset(i * lineW, h - lineH),
+                                    size = androidx.compose.ui.geometry.Size(lineW - 2.dp.toPx(), lineH)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text("Classification", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.5f))
+                    Text(log.classification, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text("Forensic Details Log", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.5f))
+                    Text(log.details, color = Color(0xFFE2E8F0).copy(alpha = 0.8f), fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp), lineHeight = 18.sp)
+                }
+            }
+        }
     }
 }
 
@@ -202,12 +891,12 @@ fun AuraShieldTheme(content: @Composable () -> Unit) {
         primary = Color(0xFF00C896),       // Electric Mint Green
         secondary = Color(0xFF00C896),
         background = Color(0xFF0B0F26),      // Deep Midnight Navy
-        surface = Color(0xFF1F2336),         // Container background
+        surface = Color(0xFF1F2336),         // Container surface
         onPrimary = Color(0xFF000000),
         onBackground = Color(0xFFE2E8F0),
         onSurface = Color(0xFFFFFFFF),
         error = Color(0xFFFF6B6B),           // Neon Coral Red
-        primaryContainer = Color(0xFF0D323F) // Muted teal-green container
+        primaryContainer = Color(0xFF0D323F)
     )
     MaterialTheme(
         colorScheme = darkColorScheme,
