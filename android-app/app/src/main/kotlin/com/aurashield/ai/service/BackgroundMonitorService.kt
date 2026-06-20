@@ -31,6 +31,8 @@ class BackgroundMonitorService : Service() {
     private var isRunning = false
     private var tfliteInterpreter: Interpreter? = null
     private var isThreatBypassed = false
+    private var isCallAnalysisEngineActive = true
+    private var isProcessingAudioBytes = false
 
     override fun onCreate() {
         super.onCreate()
@@ -161,6 +163,10 @@ class BackgroundMonitorService : Service() {
             val outputData = Array(1) { FloatArray(1) }
             var tickCount = 0
             
+            // Fallback reset in the main initialization block to start in a completely safe state
+            var riskPercentage = 0f
+            isProcessingAudioBytes = false
+            
             val targetFinancialApps = listOf(
                 "com.google.android.apps.nbu.paisa.user", // GPay
                 "com.phonepe.app",                        // PhonePe
@@ -182,7 +188,18 @@ class BackgroundMonitorService : Service() {
                         // With a 500ms delay, we want the threat to trigger after 12 seconds (24 ticks).
                         // Let's make the threat active starting from tick 24 (12s).
                         val finalRealProb = if (tickCount >= 24) 0.08f else realProbability
-                        val riskPercentage = (1.0f - finalRealProb) * 100f
+                        
+                        // Simulate active audio byte stream processing once the simulated threat is active
+                        if (tickCount >= 24) {
+                            isProcessingAudioBytes = true
+                        }
+                        
+                        // Aggressive blocking layout bug fix check
+                        riskPercentage = if (isCallAnalysisEngineActive && isProcessingAudioBytes) {
+                            (1.0f - finalRealProb) * 100f
+                        } else {
+                            0f
+                        }
                         
                         // Check foreground app
                         val foregroundApp = getForegroundPackageName(this@BackgroundMonitorService)
