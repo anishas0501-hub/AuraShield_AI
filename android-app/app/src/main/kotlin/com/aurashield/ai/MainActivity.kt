@@ -200,7 +200,7 @@ class MainActivity : FragmentActivity() {
                         }
                     )
                     Screen.Detection -> EdgeLiveDetectionScreen()
-                    Screen.KillSwitch -> SystemKillSwitchScreen()
+                    Screen.KillSwitch -> SystemLockScreen()
                     Screen.History -> ForensicHistoryScreen()
                 }
             }
@@ -247,7 +247,7 @@ class MainActivity : FragmentActivity() {
             // Central Logo
             Box(
                 modifier = Modifier
-                    .size(120dp)
+                    .size(120.dp)
                     .background(Color(0xFF1F2336), RoundedCornerShape(60.dp))
                     .border(2.dp, Color(0xFF00C896), RoundedCornerShape(60.dp)),
                 contentAlignment = Alignment.Center
@@ -256,7 +256,7 @@ class MainActivity : FragmentActivity() {
                     imageVector = Icons.Default.Shield,
                     contentDescription = null,
                     tint = Color(0xFF00C896),
-                    modifier = Modifier.size(54dp)
+                    modifier = Modifier.size(54.dp)
                 )
             }
 
@@ -311,7 +311,7 @@ class MainActivity : FragmentActivity() {
                 onClick = onNavigateToDashboard,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52dp),
+                    .height(52.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF00C896),
@@ -410,7 +410,7 @@ class MainActivity : FragmentActivity() {
 
             // AI Protection Circular Score (92%)
             Box(
-                modifier = Modifier.size(160dp),
+                modifier = Modifier.size(160.dp),
                 contentAlignment = Alignment.Center
             ) {
                 // Circle border
@@ -545,9 +545,9 @@ class MainActivity : FragmentActivity() {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200dp)
+                    .height(200.dp)
                     .background(Color(0xFF12162E), RoundedCornerShape(20.dp))
-                    .border(1.2dp, Color(0xFF1F2445), RoundedCornerShape(20.dp)),
+                    .border(1.2.dp, Color(0xFF1F2445), RoundedCornerShape(20.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 // Multi-layered Canvas wave drawing
@@ -582,7 +582,7 @@ class MainActivity : FragmentActivity() {
                     drawPath(
                         path = path2,
                         color = Color(0xFF00C896).copy(alpha = 0.4f),
-                        style = Stroke(width = 1.5dp.toPx())
+                        style = Stroke(width = 1.5.dp.toPx())
                     )
                 }
 
@@ -639,9 +639,10 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    // 4. SystemKillSwitchScreen
+    // 4. SystemLockScreen
     @Composable
-    fun SystemKillSwitchScreen() {
+    fun SystemLockScreen() {
+        var isThreatActive by remember { mutableStateOf(true) }
         var secondsLeft by remember { mutableStateOf(900) } // 15 minutes = 900s
         val context = LocalContext.current
 
@@ -656,6 +657,39 @@ class MainActivity : FragmentActivity() {
         val seconds = secondsLeft % 60
         val formattedTime = String.format(Locale.US, "%02d:%02d", minutes, seconds)
 
+        if (!isThreatActive) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = Color(0xFF00C896),
+                    modifier = Modifier.size(72.dp)
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = "SYSTEM BYPASS APPROVED",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    fontSize = 18.sp
+                )
+                Text(
+                    text = "Identity verified successfully. Financial transaction locks have been removed and system overlay dismissed.",
+                    color = Color(0xFFE2E8F0).copy(alpha = 0.6f),
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp, start = 16.dp, end = 16.dp),
+                    lineHeight = 18.sp
+                )
+            }
+            return
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -666,7 +700,7 @@ class MainActivity : FragmentActivity() {
             // Neon coral red alert block icon
             Box(
                 modifier = Modifier
-                    .size(90dp)
+                    .size(90.dp)
                     .background(Color(0xFFFF6B6B).copy(alpha = 0.1f), RoundedCornerShape(45.dp))
                     .border(2.dp, Color(0xFFFF6B6B), RoundedCornerShape(45.dp)),
                 contentAlignment = Alignment.Center
@@ -675,7 +709,7 @@ class MainActivity : FragmentActivity() {
                     imageVector = Icons.Default.Lock,
                     contentDescription = null,
                     tint = Color(0xFFFF6B6B),
-                    modifier = Modifier.size(36dp)
+                    modifier = Modifier.size(36.dp)
                 )
             }
 
@@ -732,7 +766,13 @@ class MainActivity : FragmentActivity() {
                 onClick = {
                     if (activity != null) {
                         BiometricAuthManager.showBiometricPrompt(activity) {
-                            Toast.makeText(context, "Biometric Verification Succeeded! Override Approved.", Toast.LENGTH_LONG).show()
+                            isThreatActive = false
+                            // Dismiss active WindowManager overlay view by sending dismiss intent to service
+                            val intent = Intent(context, BackgroundMonitorService::class.java).apply {
+                                action = BackgroundMonitorService.ACTION_DISMISS_OVERLAY
+                            }
+                            context.startService(intent)
+                            Toast.makeText(context, "Bypass Auth Approved!", Toast.LENGTH_SHORT).show()
                         }
                     } else {
                         Toast.makeText(context, "Requesting Local System Biometrics...", Toast.LENGTH_SHORT).show()
@@ -740,7 +780,7 @@ class MainActivity : FragmentActivity() {
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52dp),
+                    .height(52.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6B6B), contentColor = Color.White)
             ) {
@@ -853,7 +893,7 @@ class MainActivity : FragmentActivity() {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(80dp)
+                            .height(80.dp)
                             .padding(top = 6.dp)
                             .background(Color(0xFF12162E), RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.Center

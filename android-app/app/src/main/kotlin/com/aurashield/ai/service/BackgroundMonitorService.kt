@@ -36,6 +36,11 @@ class BackgroundMonitorService : Service() {
             stopServiceInternal()
             return START_NOT_STICKY
         }
+        
+        if (intent?.action == ACTION_DISMISS_OVERLAY) {
+            hideOverlay()
+            return START_STICKY
+        }
 
         if (!isRunning) {
             isRunning = true
@@ -209,5 +214,6 @@ class BackgroundMonitorService : Service() {
         private const val NOTIFICATION_ID = 1001
         
         const val ACTION_STOP_SERVICE = "com.aurashield.ai.action.STOP_SERVICE"
+        const val ACTION_DISMISS_OVERLAY = "com.aurashield.ai.action.DISMISS_OVERLAY"
     }
 }
