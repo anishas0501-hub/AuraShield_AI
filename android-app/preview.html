@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuraShield AI - Android Layout Preview</title>
+    <style>
+        :root {
+            --midnight-navy: #0B0F26;
+            --midnight-navy-dark: #050818;
+            --mint-green: #00C896;
+            --neon-coral: #FF6B6B;
+            --gray-dark: #1F2336;
+            --gray-light: #E2E8F0;
+            --white: #FFFFFF;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--midnight-navy);
+            color: var(--white);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Mock mobile device container wrapper */
+        .device-container {
+            width: 375px;
+            height: 780px;
+            background-color: var(--midnight-navy);
+            border: 10px solid #1c2035;
+            border-radius: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+
+        /* Device notch */
+        .device-notch {
+            width: 140px;
+            height: 25px;
+            background-color: #1c2035;
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            border-bottom-left-radius: 18px;
+            border-bottom-right-radius: 18px;
+            z-index: 100;
+        }
+
+        /* Header styling */
+        .header {
+            margin-top: 30px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .status-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 8px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--mint-green);
+            border-radius: 50%;
+            margin-right: 6px;
+            box-shadow: 0 0 10px var(--mint-green);
+        }
+
+        .status-text {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--mint-green);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* Central button section */
+        .shield-section {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .shield-glow-ring {
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            background-color: rgba(0, 200, 150, 0.04);
+            border: 2px solid rgba(0, 200, 150, 0.1);
+            position: absolute;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            animation: shieldPulse 1.5s infinite alternate ease-in-out;
+        }
+
+        .shield-button {
+            width: 150px;
+            height: 150px;
+            background-color: var(--gray-dark);
+            border: 3px solid var(--mint-green);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(0, 200, 150, 0.2);
+            transition: all 0.3s ease;
+            position: relative;
+            z-index: 10;
+        }
+
+        .shield-button:hover {
+            box-shadow: 0 0 30px rgba(0, 200, 150, 0.4);
+            transform: scale(1.02);
+        }
+
+        /* SVG Shield Icon */
+        .shield-icon {
+            width: 60px;
+            height: 60px;
+            fill: var(--mint-green);
+        }
+
+        /* Live Audio Wave visualizer placeholder */
+        .audio-wave-container {
+            height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-bottom: 24px;
+            flex-shrink: 0;
+        }
+
+        .wave-bar {
+            width: 4px;
+            height: 15px;
+            background-color: var(--mint-green);
+            border-radius: 2px;
+            animation: waveAnimate 1s infinite ease-in-out;
+            transform-origin: center;
+        }
+
+        /* Random animations for audio wave bars */
+        .wave-bar:nth-child(1) { height: 15px; animation-delay: 0.1s; animation-duration: 0.8s; }
+        .wave-bar:nth-child(2) { height: 30px; animation-delay: 0.3s; animation-duration: 1.1s; }
+        .wave-bar:nth-child(3) { height: 48px; animation-delay: 0.5s; animation-duration: 0.9s; }
+        .wave-bar:nth-child(4) { height: 25px; animation-delay: 0.2s; animation-duration: 1.3s; }
+        .wave-bar:nth-child(5) { height: 60px; animation-delay: 0.6s; animation-duration: 0.7s; }
+        .wave-bar:nth-child(6) { height: 35px; animation-delay: 0.4s; animation-duration: 1.0s; }
+        .wave-bar:nth-child(7) { height: 15px; animation-delay: 0.2s; animation-duration: 0.9s; }
+        .wave-bar:nth-child(8) { height: 40px; animation-delay: 0.5s; animation-duration: 1.2s; }
+        .wave-bar:nth-child(9) { height: 52px; animation-delay: 0.1s; animation-duration: 0.8s; }
+        .wave-bar:nth-child(10) { height: 22px; animation-delay: 0.3s; animation-duration: 1.1s; }
+        .wave-bar:nth-child(11) { height: 45px; animation-delay: 0.4s; animation-duration: 0.9s; }
+        .wave-bar:nth-child(12) { height: 15px; animation-delay: 0.2s; animation-duration: 1.4s; }
+
+        /* Bottom metrics card */
+        .metrics-card {
+            background-color: var(--midnight-navy-dark);
+            border: 1px solid #1F2445;
+            border-radius: 16px;
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-shrink: 0;
+        }
+
+        .metric-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .metric-value.calls { color: var(--white); }
+        .metric-value.threats { color: var(--neon-coral); }
+        .metric-value.latency { color: var(--mint-green); }
+
+        .metric-label {
+            font-size: 9px;
+            font-weight: 800;
+            color: var(--gray-light);
+            opacity: 0.6;
+            margin-top: 4px;
+            letter-spacing: 0.5px;
+        }
+
+        .divider {
+            width: 1px;
+            height: 35px;
+            background-color: #1F2445;
+        }
+
+        /* Pulsing keyframe for shield outer ring */
+        @keyframes shieldPulse {
+            0% {
+                transform: scale(1.0);
+                opacity: 0.7;
+            }
+            100% {
+                transform: scale(1.08);
+                opacity: 1.0;
+                box-shadow: 0 0 15px rgba(0, 200, 150, 0.15);
+            }
+        }
+
+        /* Wave keyframe animation */
+        @keyframes waveAnimate {
+            0%, 100% {
+                transform: scaleY(1.0);
+            }
+            50% {
+                transform: scaleY(0.4);
+            }
+        }
+
+        /* Interactivity styling when service stops */
+        .device-container.inactive .status-dot {
+            background-color: var(--neon-coral);
+            box-shadow: 0 0 10px var(--neon-coral);
+        }
+
+        .device-container.inactive .status-text {
+            color: var(--neon-coral);
+            content: "PROTECTION INACTIVE";
+        }
+
+        .device-container.inactive .shield-button {
+            border-color: var(--neon-coral);
+            box-shadow: 0 0 20px rgba(255, 107, 107, 0.2);
+        }
+
+        .device-container.inactive .shield-icon {
+            fill: var(--neon-coral);
+        }
+
+        .device-container.inactive .shield-glow-ring {
+            animation-play-state: paused;
+            border-color: rgba(255, 107, 107, 0.1);
+            background-color: rgba(255, 107, 107, 0.02);
+            box-shadow: none;
+        }
+
+        .device-container.inactive .wave-bar {
+            animation-play-state: paused;
+            background-color: var(--gray-light);
+            opacity: 0.3;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="device-container" id="device">
+        <div class="device-notch"></div>
+
+        <!-- Header -->
+        <div class="header">
+            <h1>AuraShield AI</h1>
+            <div class="status-container">
+                <div class="status-dot"></div>
+                <div class="status-text" id="statusText">Live Edge Protection Active</div>
+            </div>
+        </div>
+
+        <!-- Shield button section -->
+        <div class="shield-section">
+            <div class="shield-glow-ring"></div>
+            <div class="shield-button" id="shieldButton" onclick="toggleProtection()">
+                <svg class="shield-icon" viewBox="0 0 24 24" id="shieldIcon">
+                    <!-- Premium shield path -->
+                    <path d="M12,2L4,5v6c0,5.55 3.84,10.74 9,12 5.16,-1.26 9,-6.45 9,-12V5l-9,-3zm0,10.99h7c-0.53,4.12 -3.28,7.79 -7,8.94V13H5V6.3l7,-3.11v9.81z"/>
+                </svg>
+            </div>
+        </div>
+
+        <!-- Scrolling Audio Wave visualizer placeholder -->
+        <div class="audio-wave-container" id="waveContainer">
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+        </div>
+
+        <!-- Metrics Cards grid -->
+        <div class="metrics-card">
+            <div class="metric-item">
+                <div class="metric-value calls">1,248</div>
+                <div class="metric-label">SCANNED</div>
+            </div>
+            <div class="divider"></div>
+            <div class="metric-item">
+                <div class="metric-value threats">42</div>
+                <div class="metric-label">BLOCKED</div>
+            </div>
+            <div class="divider"></div>
+            <div class="metric-item">
+                <div class="metric-value latency">12 ms</div>
+                <div class="metric-label">LATENCY</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let active = true;
+
+        function toggleProtection() {
+            active = !active;
+            const device = document.getElementById('device');
+            const statusText = document.getElementById('statusText');
+            
+            if (active) {
+                device.classList.remove('inactive');
+                statusText.innerText = "Live Edge Protection Active";
+            } else {
+                device.classList.add('inactive');
+                statusText.innerText = "Protection Inactive";
+            }
+        }
+    </script>
+</body>
+</html>
