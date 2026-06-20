@@ -7,28 +7,26 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.animation.AnimationUtils
+import android.widget.ImageButton
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.aurashield.ai.service.BackgroundMonitorService
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -101,192 +99,92 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Extract library versions safely
-        val tfLiteVersion = remember {
-            try {
-                org.tensorflow.lite.TensorFlowLite.version()
-            } catch (e: Throwable) {
-                "Not Loaded: ${e.message}"
-            }
-        }
-
-        val onnxVersion = remember {
-            try {
-                // Just verify if environment package loads
-                ai.onnxruntime.OrtEnvironment.getEnvironment()
-                "Loaded (1.17.1)"
-            } catch (e: Throwable) {
-                "Not Loaded: ${e.message}"
-            }
-        }
-
-        Surface(
+        AndroidView(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top
-            ) {
-                Spacer(modifier = Modifier.height(20.dp))
+            factory = { context ->
+                val view = android.view.LayoutInflater.from(context).inflate(R.layout.activity_main, null)
                 
-                Text(
-                    text = "AuraShield AI",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                
-                Text(
-                    text = "Security Monitor Console",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(bottom = 32.dp)
-                )
+                // Set up pulsing scale animation on the central shield button view
+                val shieldButton = view.findViewById<ImageButton>(R.id.btnShield)
+                val shieldPulseAnim = AnimationUtils.loadAnimation(context, R.anim.shield_pulse)
+                shieldButton.startAnimation(shieldPulseAnim)
 
-                // Service Status Card
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 24.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (serviceRunning) 
-                            MaterialTheme.colorScheme.primaryContainer 
-                        else 
-                            MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            text = "MONITOR STATUS",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (serviceRunning) 
-                                MaterialTheme.colorScheme.primary 
-                            else 
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = if (serviceRunning) Icons.Default.CheckCircle else Icons.Default.Warning,
-                                contentDescription = null,
-                                tint = if (serviceRunning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (serviceRunning) "Active & Monitoring" else "Inactive / Idle",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                // Set up pulsing alpha animation on the status indicators
+                val statusLayout = view.findViewById<android.view.View>(R.id.layoutStatus)
+                val subtitlePulseAnim = AnimationUtils.loadAnimation(context, R.anim.subtitle_pulse)
+                statusLayout.startAnimation(subtitlePulseAnim)
+
+                // Start background animation for audio wave bars
+                val waveBars = listOf(
+                    view.findViewById<android.view.View>(R.id.waveBar1),
+                    view.findViewById<android.view.View>(R.id.waveBar2),
+                    view.findViewById<android.view.View>(R.id.waveBar3),
+                    view.findViewById<android.view.View>(R.id.waveBar4),
+                    view.findViewById<android.view.View>(R.id.waveBar5),
+                    view.findViewById<android.view.View>(R.id.waveBar6),
+                    view.findViewById<android.view.View>(R.id.waveBar7),
+                    view.findViewById<android.view.View>(R.id.waveBar8),
+                    view.findViewById<android.view.View>(R.id.waveBar9),
+                    view.findViewById<android.view.View>(R.id.waveBar10),
+                    view.findViewById<android.view.View>(R.id.waveBar11),
+                    view.findViewById<android.view.View>(R.id.waveBar12)
+                )
+                
+                // Launch coroutine to animate wave bars heights
+                (context as? androidx.lifecycle.LifecycleOwner)?.lifecycleScope?.launch {
+                    val random = java.util.Random()
+                    while (isActive) {
+                        for (bar in waveBars) {
+                            bar?.let {
+                                val newScaleY = 0.2f + random.nextFloat() * 1.3f
+                                it.animate()
+                                    .scaleY(newScaleY)
+                                    .setDuration(120)
+                                    .start()
+                            }
                         }
+                        kotlinx.coroutines.delay(130)
                     }
                 }
 
-                // Controls
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Button(
-                        onClick = { startMonitorService() },
-                        enabled = !serviceRunning,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Start Monitor")
+                // Handle click action to toggle service
+                shieldButton.setOnClickListener {
+                    if (isServiceRunning()) {
+                        stopMonitorService()
+                        Toast.makeText(context, "Stopping Security Monitor...", Toast.LENGTH_SHORT).show()
+                    } else {
+                        startMonitorService()
+                        Toast.makeText(context, "Starting Security Monitor...", Toast.LENGTH_SHORT).show()
                     }
-
-                    Button(
-                        onClick = { stopMonitorService() },
-                        enabled = serviceRunning,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError
-                        )
-                    ) {
-                        Text("Stop Monitor")
-                    }
+                    serviceRunning = isServiceRunning()
                 }
 
-                Spacer(modifier = Modifier.height(40.dp))
+                view
+            },
+            update = { view ->
+                // Update views based on service state
+                val statusText = view.findViewById<TextView>(R.id.tvStatusText)
+                val statusDot = view.findViewById<android.view.View>(R.id.viewStatusDot)
+                val shieldButton = view.findViewById<ImageButton>(R.id.btnShield)
+                val shieldGlow = view.findViewById<android.view.View>(R.id.viewShieldGlow)
 
-                // Library / Dependency Status Section
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(bottom = 16.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.secondary
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "AI/ML Runtime Roster",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        
-                        Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        RuntimeInfoRow(name = "TensorFlow Lite", version = tfLiteVersion)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        RuntimeInfoRow(name = "ONNX Runtime Mobile", version = onnxVersion)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        RuntimeInfoRow(name = "Kotlin Coroutines", version = "1.7.3")
-                    }
+                if (serviceRunning) {
+                    statusText.text = "Live Edge Protection Active"
+                    statusText.setTextColor(ContextCompat.getColor(view.context, R.color.mint_green))
+                    statusDot.setBackgroundColor(ContextCompat.getColor(view.context, R.color.mint_green))
+                    shieldButton.setImageResource(R.drawable.ic_shield)
+                    // Show active glow ring
+                    shieldGlow.visibility = android.view.View.VISIBLE
+                } else {
+                    statusText.text = "Protection Inactive"
+                    statusText.setTextColor(ContextCompat.getColor(view.context, R.color.neon_coral))
+                    statusDot.setBackgroundColor(ContextCompat.getColor(view.context, R.color.neon_coral))
+                    shieldButton.setImageResource(android.R.drawable.ic_lock_lock)
+                    // Hide active glow ring
+                    shieldGlow.visibility = android.view.View.INVISIBLE
                 }
             }
-        }
-    }
-
-    @Composable
-    fun RuntimeInfoRow(name: String, version: String) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = name,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-            )
-            Text(
-                text = version,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
+        )
     }
 }
 
