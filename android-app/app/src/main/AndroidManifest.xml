@@ -18,6 +18,9 @@
     <!-- Usage Stats Permission to detect foreground applications -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
+    <!-- Phone State Permission to track actual phone calls -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+
     <!-- Package Queries to verify installation of target financial apps -->
     <queries>
         <package android:name="com.google.android.apps.nbu.paisa.user" /> <!-- GPay -->

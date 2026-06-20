@@ -20,6 +20,9 @@ import com.aurashield.ai.R
 import kotlinx.coroutines.*
 import android.app.usage.UsageStats
 import android.app.usage.UsageStatsManager
+import android.telephony.TelephonyManager
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
 import org.tensorflow.lite.Interpreter
 import java.io.FileInputStream
 import java.nio.MappedByteBuffer
@@ -50,6 +53,12 @@ class BackgroundMonitorService : Service() {
         if (intent?.action == ACTION_DISMISS_OVERLAY) {
             isThreatBypassed = true
             hideOverlay()
+            return START_STICKY
+        }
+
+        if (intent?.action == ACTION_SIMULATE_CALL) {
+            isSimulatedCallActive = intent.getBooleanExtra(EXTRA_CALL_ACTIVE, false)
+            Log.d(TAG, "Simulated call status changed: $isSimulatedCallActive")
             return START_STICKY
         }
 
@@ -133,6 +142,22 @@ class BackgroundMonitorService : Service() {
         }
     }
 
+    private fun isCallActive(context: Context): Boolean {
+        if (isSimulatedCallActive) {
+            return true
+        }
+        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+            if (telephonyManager != null) {
+                @Suppress("DEPRECATION")
+                if (telephonyManager.callState != TelephonyManager.CALL_STATE_IDLE) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
     private fun getForegroundPackageName(context: Context): String? {
         val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
         val endTime = System.currentTimeMillis()
@@ -174,51 +199,62 @@ class BackgroundMonitorService : Service() {
             )
             
             while (isActive) {
-                Log.d(TAG, "AI background monitor performing inference tick...")
+                val callActive = isCallActive(this@BackgroundMonitorService)
                 
-                if (tfliteInterpreter != null) {
-                    try {
-                        tickCount++
-                        
-                        // Run inference using the input data mapping [1, 128, 128, 3]
-                        tfliteInterpreter?.run(inputData, outputData)
-                        val realProbability = outputData[0][0]
-                        
-                        // Simulate threat logic:
-                        // With a 500ms delay, we want the threat to trigger after 12 seconds (24 ticks).
-                        // Let's make the threat active starting from tick 24 (12s).
-                        val finalRealProb = if (tickCount >= 24) 0.08f else realProbability
-                        
-                        // Simulate active audio byte stream processing once the simulated threat is active
-                        if (tickCount >= 24) {
-                            isProcessingAudioBytes = true
-                        }
-                        
-                        // Aggressive blocking layout bug fix check
-                        riskPercentage = if (isCallAnalysisEngineActive && isProcessingAudioBytes) {
-                            (1.0f - finalRealProb) * 100f
-                        } else {
-                            0f
-                        }
-                        
-                        // Check foreground app
-                        val foregroundApp = getForegroundPackageName(this@BackgroundMonitorService)
-                        Log.i(TAG, "Inference output (prob of real): $finalRealProb, Computed Risk: $riskPercentage%, Foreground: $foregroundApp")
-                        
-                        // Overlay trigger conditions
-                        val isForegroundAppTarget = foregroundApp != null && targetFinancialApps.contains(foregroundApp)
-                        
-                        if (riskPercentage >= 80f && isForegroundAppTarget && !isThreatBypassed) {
-                            Log.w(TAG, "CRITICAL THREAT DETECTED! Risk is $riskPercentage% and financial app $foregroundApp is in foreground. Displaying overlay.")
-                            withContext(Dispatchers.Main) {
-                                showOverlay()
+                if (callActive) {
+                    if (tfliteInterpreter != null) {
+                        try {
+                            tickCount++
+                            
+                            // Run inference using the input data mapping [1, 128, 128, 3]
+                            tfliteInterpreter?.run(inputData, outputData)
+                            val realProbability = outputData[0][0]
+                            
+                            // Simulate threat logic:
+                            // With a 500ms delay, we want the threat to trigger after 12 seconds (24 ticks).
+                            // Let's make the threat active starting from tick 24 (12s).
+                            val finalRealProb = if (tickCount >= 24) 0.08f else realProbability
+                            
+                            // Simulate active audio byte stream processing once the simulated threat is active
+                            if (tickCount >= 24) {
+                                isProcessingAudioBytes = true
                             }
+                            
+                            // Aggressive blocking layout bug fix check
+                            riskPercentage = if (isCallAnalysisEngineActive && isProcessingAudioBytes) {
+                                (1.0f - finalRealProb) * 100f
+                            } else {
+                                0f
+                            }
+                            
+                            // Check foreground app
+                            val foregroundApp = getForegroundPackageName(this@BackgroundMonitorService)
+                            Log.i(TAG, "Call active. Ticks: $tickCount, Prob of real: $finalRealProb, Risk: $riskPercentage%, Foreground: $foregroundApp")
+                            
+                            // Overlay trigger conditions
+                            val isForegroundAppTarget = foregroundApp != null && targetFinancialApps.contains(foregroundApp)
+                            
+                            if (riskPercentage >= 80f && isForegroundAppTarget && !isThreatBypassed) {
+                                Log.w(TAG, "CRITICAL THREAT DETECTED! Risk is $riskPercentage% and financial app $foregroundApp is in foreground. Displaying overlay.")
+                                withContext(Dispatchers.Main) {
+                                    showOverlay()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Inference execution error: ${e.message}", e)
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Inference execution error: ${e.message}", e)
+                    } else {
+                        Log.w(TAG, "TFLite interpreter not initialized.")
                     }
                 } else {
-                    Log.w(TAG, "TFLite interpreter not initialized.")
+                    // Reset threat state when no call is active
+                    if (tickCount > 0 || riskPercentage > 0f || isProcessingAudioBytes) {
+                        Log.d(TAG, "No call active. Resetting call threat states to safe values.")
+                        tickCount = 0
+                        riskPercentage = 0f
+                        isProcessingAudioBytes = false
+                        isThreatBypassed = false // Reset bypass so they can test again on next call
+                    }
                 }
                 
                 delay(500) // 500ms periodic interval
@@ -324,5 +360,9 @@ class BackgroundMonitorService : Service() {
         
         const val ACTION_STOP_SERVICE = "com.aurashield.ai.action.STOP_SERVICE"
         const val ACTION_DISMISS_OVERLAY = "com.aurashield.ai.action.DISMISS_OVERLAY"
+        const val ACTION_SIMULATE_CALL = "com.aurashield.ai.action.SIMULATE_CALL"
+        const val EXTRA_CALL_ACTIVE = "com.aurashield.ai.extra.CALL_ACTIVE"
+        
+        var isSimulatedCallActive = false
     }
 }

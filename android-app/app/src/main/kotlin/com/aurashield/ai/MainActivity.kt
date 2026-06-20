@@ -58,6 +58,14 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    private val requestPhoneStatePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            Toast.makeText(this, "Call tracking permission granted", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -79,6 +87,13 @@ class MainActivity : FragmentActivity() {
             ) {
                 requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
+        }
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_PHONE_STATE
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPhoneStatePermissionLauncher.launch(Manifest.permission.READ_PHONE_STATE)
         }
     }
 
@@ -596,7 +611,54 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Call Simulation Console Card
+            var isCallSimulated by remember { mutableStateOf(BackgroundMonitorService.isSimulatedCallActive) }
+            val context = LocalContext.current
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2336))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Simulate Call Stream", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                        Text(
+                            "Simulates active voice connection inputs for testing the GPay overlay blocking trigger.",
+                            fontSize = 11.sp,
+                            color = Color(0xFFE2E8F0).copy(alpha = 0.5f),
+                            lineHeight = 14.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = isCallSimulated,
+                        onCheckedChange = { checked ->
+                            isCallSimulated = checked
+                            val intent = Intent(context, BackgroundMonitorService::class.java).apply {
+                                action = BackgroundMonitorService.ACTION_SIMULATE_CALL
+                                putExtra(BackgroundMonitorService.EXTRA_CALL_ACTIVE, checked)
+                            }
+                            context.startService(intent)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.Black,
+                            checkedTrackColor = Color(0xFF00C896),
+                            uncheckedTrackColor = Color(0xFF0B0F26)
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Edge inference metrics statistics card
             Card(
