@@ -66,10 +66,23 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    private val requestCallLogPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            Toast.makeText(this, "Call Log permission granted", Toast.LENGTH_SHORT).show()
+            com.aurashield.ai.data.HistoryRegistry.loadCallLogRecords(this)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
         checkAndRequestPermissions()
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED) {
+            com.aurashield.ai.data.HistoryRegistry.loadCallLogRecords(this)
+        }
 
         setContent {
             AuraShieldTheme {
@@ -94,6 +107,13 @@ class MainActivity : FragmentActivity() {
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             requestPhoneStatePermissionLauncher.launch(Manifest.permission.READ_PHONE_STATE)
+        }
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_CALL_LOG
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestCallLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
         }
     }
 
@@ -893,25 +913,13 @@ class MainActivity : FragmentActivity() {
     }
 
     // 5. ForensicHistoryScreen
-    data class ThreatLog(
-        val phone: String,
-        val risk: Int,
-        val timestamp: String,
-        val details: String,
-        val classification: String
-    )
-
     @Composable
     fun ForensicHistoryScreen() {
-        val mockLogs = remember {
-            listOf(
-                ThreatLog("+1 (555) 019-2834", 92, "10 mins ago", "Deepfake anomaly identified. Formant shifts match cloned model pattern.", "AI Voice Clone"),
-                ThreatLog("+1 (555) 048-1920", 45, "1 hour ago", "Suspect pitch variance detected. Voice features altered.", "Pitch Variance"),
-                ThreatLog("+1 (555) 012-7384", 2, "3 hours ago", "Acoustics matching authenticated signature.", "Safe Contact"),
-                ThreatLog("+1 (555) 089-3829", 95, "Yesterday", "Financial request keywords mapping deepfake model payload.", "AI Clone / Scammer")
-            )
+        val context = LocalContext.current
+        LaunchedEffect(Unit) {
+            com.aurashield.ai.data.HistoryRegistry.loadCallLogRecords(context)
         }
-
+        val records = com.aurashield.ai.data.HistoryRegistry.records
         var expandedIndex by remember { mutableStateOf(-1) }
 
         Column(
@@ -932,7 +940,7 @@ class MainActivity : FragmentActivity() {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                itemsIndexed(mockLogs) { index, log ->
+                itemsIndexed(records) { index, log ->
                     ForensicLogCard(
                         log = log,
                         expanded = index == expandedIndex,
@@ -947,13 +955,13 @@ class MainActivity : FragmentActivity() {
 
     @Composable
     fun ForensicLogCard(
-        log: ThreatLog,
+        log: com.aurashield.ai.data.ForensicCallRecord,
         expanded: Boolean,
         onToggle: () -> Unit
     ) {
         val riskColor = when {
-            log.risk >= 80 -> Color(0xFFFF6B6B)
-            log.risk >= 30 -> Color(0xFFFF9800)
+            log.riskPercentage >= 80f -> Color(0xFFFF6B6B)
+            log.riskPercentage >= 30f -> Color(0xFFFF9800)
             else -> Color(0xFF00C896)
         }
 
@@ -971,8 +979,8 @@ class MainActivity : FragmentActivity() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text(log.phone, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
-                        Text(log.timestamp, fontSize = 11.sp, color = Color(0xFFE2E8F0).copy(alpha = 0.5f))
+                        Text(log.phoneNumber, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
+                        Text(log.timestampString, fontSize = 11.sp, color = Color(0xFFE2E8F0).copy(alpha = 0.5f))
                     }
                     Box(
                         modifier = Modifier
@@ -980,7 +988,7 @@ class MainActivity : FragmentActivity() {
                             .border(1.dp, riskColor, RoundedCornerShape(8.dp))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("${log.risk}% RISK", color = riskColor, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text("${log.riskPercentage.toInt()}% RISK", color = riskColor, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     }
                 }
 
@@ -1024,7 +1032,8 @@ class MainActivity : FragmentActivity() {
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text("Classification", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.5f))
-                    Text(log.classification, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
+                    val classification = if (log.isAiClone) "AI Voice Clone" else if (log.riskPercentage >= 30f) "Pitch Variance" else "Safe Contact"
+                    Text(classification, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
 
                     Spacer(modifier = Modifier.height(10.dp))
 
