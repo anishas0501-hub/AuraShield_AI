@@ -268,10 +268,16 @@ class BackgroundMonitorService : Service() {
                         currentRecord = null
                     }
 
-                    if (isCellularCallActive && isSimulatedAttackActive) {
+                    if (isCellularCallActive) {
                         tickCount++
-                        riskPercentage = 95f
-                        isProcessingAudioBytes = true
+                        if (isSimulatedAttackActive) {
+                            riskPercentage = 95f
+                            isProcessingAudioBytes = true
+                        } else {
+                            riskPercentage = 0f
+                            isProcessingAudioBytes = false
+                            tickCount = 0
+                        }
                     } else if (tfliteInterpreter != null) {
                         try {
                             tickCount++
@@ -342,7 +348,7 @@ class BackgroundMonitorService : Service() {
                     // Overlay trigger conditions
                     val isForegroundAppTarget = foregroundApp != null && targetFinancialApps.contains(foregroundApp)
                     
-                    if (isForegroundAppTarget && !isCoolingOffActive && (riskPercentage >= 80f || isSimulatedAttackActive)) {
+                    if (isForegroundAppTarget && !isCoolingOffActive && isSimulatedAttackActive) {
                         Log.w(TAG, "CRITICAL THREAT DETECTED! Risk is $riskPercentage% and financial app $foregroundApp is in foreground. Displaying overlay.")
                         withContext(Dispatchers.Main) {
                             showOverlay()
