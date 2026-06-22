@@ -48,7 +48,14 @@ import kotlinx.coroutines.isActive
 import java.util.Locale
 import kotlin.math.sin
 
+import android.view.LayoutInflater
+import androidx.navigation.ui.setupWithNavController
+import androidx.navigation.fragment.NavHostFragment
+import com.google.android.material.bottomnavigation.BottomNavigationView
+
 class MainActivity : FragmentActivity() {
+
+    private var isBiometricMode by mutableStateOf(false)
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -78,7 +85,17 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        isBiometricMode = intent?.getBooleanExtra("LAUNCH_BIOMETRIC", false) == true
+        if (isBiometricMode) {
+            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        }
+
         checkAndRequestPermissions()
+        handleBiometricIntent(intent)
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED) {
+            com.aurashield.ai.data.HistoryRegistry.loadCallLogRecords(this)
+        }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED) {
             com.aurashield.ai.data.HistoryRegistry.loadCallLogRecords(this)
@@ -86,7 +103,55 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             AuraShieldTheme {
-                MainNavigationFrame()
+                if (isBiometricMode) {
+                    Spacer(modifier = Modifier.fillMaxSize())
+                } else {
+                    androidx.compose.ui.viewinterop.AndroidView(
+                        factory = { context ->
+                            val view = LayoutInflater.from(context).inflate(R.layout.activity_main, null)
+                            
+                            view.post {
+                                try {
+                                    val navHostFragment = supportFragmentManager
+                                        .findFragmentById(R.id.navHostFragment) as? NavHostFragment
+                                    if (navHostFragment != null) {
+                                        val bottomNav = view.findViewById<BottomNavigationView>(R.id.bottomNav)
+                                        bottomNav?.setupWithNavController(navHostFragment.navController)
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            }
+                            
+                            view
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        isBiometricMode = intent?.getBooleanExtra("LAUNCH_BIOMETRIC", false) == true
+        if (isBiometricMode) {
+            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        }
+        handleBiometricIntent(intent)
+    }
+
+    private fun handleBiometricIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("LAUNCH_BIOMETRIC", false) == true) {
+            BiometricAuthManager.showBiometricPrompt(this) {
+                val dismissIntent = Intent(this, BackgroundMonitorService::class.java).apply {
+                    action = BackgroundMonitorService.ACTION_DISMISS_OVERLAY
+                }
+                startService(dismissIntent)
+                Toast.makeText(this, "Bypass Auth Approved!", Toast.LENGTH_SHORT).show()
+                isBiometricMode = false
+                moveTaskToBack(true)
             }
         }
     }
@@ -114,6 +179,18 @@ class MainActivity : FragmentActivity() {
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             requestCallLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
+        }
+        
+        // System Overlay Permission check and intent redirection
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.canDrawOverlays(this)) {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+                Toast.makeText(this, "AuraShield AI requires overlay permissions to protect financial transactions.", Toast.LENGTH_LONG).show()
+            }
         }
     }
 

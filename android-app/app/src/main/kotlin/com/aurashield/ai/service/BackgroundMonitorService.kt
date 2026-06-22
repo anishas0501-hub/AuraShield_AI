@@ -37,6 +37,7 @@ class BackgroundMonitorService : Service() {
     var isCoolingOffActive = false
     private var isCallAnalysisEngineActive = true
     private var isProcessingAudioBytes = false
+    private var overlayCountDownTimer: android.os.CountDownTimer? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -394,13 +395,34 @@ class BackgroundMonitorService : Service() {
                 format = android.graphics.PixelFormat.TRANSLUCENT
             }
 
-            val inflater = getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
-            overlayView = inflater.inflate(R.layout.layout_emergency_lock, null)
+            val contextThemeWrapper = android.view.ContextThemeWrapper(this, R.style.Theme_AuraShieldAI)
+            val inflater = LayoutInflater.from(contextThemeWrapper)
+            overlayView = inflater.inflate(R.layout.layout_floating_popup_overlay, null)
 
-            // Bind overlay dismiss button
-            overlayView?.findViewById<Button>(R.id.btnDismissLock)?.setOnClickListener {
-                hideOverlay()
+            // Bind biometric override button to launch MainActivity for biometric prompts
+            overlayView?.findViewById<android.view.View>(R.id.btnBiometricOverride)?.setOnClickListener {
+                val intent = Intent(this@BackgroundMonitorService, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    putExtra("LAUNCH_BIOMETRIC", true)
+                }
+                startActivity(intent)
             }
+
+            // Bind countdown timer
+            val timerTextView = overlayView?.findViewById<android.widget.TextView>(R.id.countdownTimer)
+            overlayCountDownTimer?.cancel()
+            overlayCountDownTimer = object : android.os.CountDownTimer(900000, 1000) {
+                override fun onTick(millisUntilFinished: Long) {
+                    val minutes = (millisUntilFinished / 1000) / 60
+                    val seconds = (millisUntilFinished / 1000) % 60
+                    val timeStr = String.format(java.util.Locale.US, "%02d:%02d", minutes, seconds)
+                    timerTextView?.text = timeStr
+                }
+
+                override fun onFinish() {
+                    timerTextView?.text = "00:00"
+                }
+            }.start()
 
             windowManager?.addView(overlayView, layoutParams)
             Log.d(TAG, "Emergency lockdown overlay added to WindowManager")
@@ -411,6 +433,8 @@ class BackgroundMonitorService : Service() {
 
     private fun hideOverlay() {
         try {
+            overlayCountDownTimer?.cancel()
+            overlayCountDownTimer = null
             if (overlayView != null && windowManager != null) {
                 windowManager?.removeView(overlayView)
                 overlayView = null
