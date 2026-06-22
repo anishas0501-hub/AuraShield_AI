@@ -58,9 +58,8 @@ To achieve systemic stability, ensure the following runtime permission profiles 
 
 ---
 
-## 👥 Team Identity
+## 👥 Team CodeHers
 
-Developed with 💻 by Team CodeHers:
 
 * 👑 **Anisha Sadhukhan** (Team Leader)
   * *System Core and Integration Lead*
